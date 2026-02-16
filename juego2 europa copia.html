@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iberdrola: El Viaje a Europa ⚡</title>
+    <style>
+        :root {
+            --iberdrola-green: #1d8348;
+            --neon-blue: #00f2ff;
+            --dark-bg: #050a10;
+        }
+
+        body {
+            margin: 0;
+            background: var(--dark-bg);
+            color: white;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 450px;
+            height: 700px;
+            background: #000;
+            border: 2px solid var(--iberdrola-green);
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(0, 242, 255, 0.2);
+        }
+
+        /* FONDO: Mapa de los ejemplos */
+        #map-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            /* Aquí cargamos el mapa generado anteriormente */
+            background: url('mapa.jpg') no-repeat center bottom;
+            background-size: cover;
+            z-index: 1;
+        }
+
+        /* Overlay para dar profundidad y oscuridad arriba */
+        #overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(5,10,16,0.8) 0%, transparent 40%, rgba(5,10,16,0.4) 100%);
+            z-index: 2;
+        }
+
+        /* JUGADORA */
+        #player {
+            position: absolute;
+            bottom: 60px;
+            left: 180px;
+            width: 100px;
+            height: 140px;
+            background: url('jugadora.png') no-repeat center center;
+            background-size: contain;
+            z-index: 10;
+            transition: left 0.15s ease-out;
+            filter: drop-shadow(0 0 10px var(--iberdrola-green));
+        }
+
+        /* OBSTÁCULOS */
+        .obstacle {
+            position: absolute;
+            z-index: 5;
+            transition: transform 0.1s linear;
+        }
+
+        .ball {
+            width: 40px;
+            height: 40px;
+            background: radial-gradient(circle at 30% 30%, #f39c12, #d35400);
+            border-radius: 50%;
+            border: 2px solid #fff;
+            box-shadow: 0 0 15px #f39c12;
+        }
+
+        .wall {
+            width: 120px;
+            height: 15px;
+            background: var(--neon-blue);
+            box-shadow: 0 0 20px var(--neon-blue);
+            border-radius: 10px;
+        }
+
+        /* INTERFAZ (HUD) */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            z-index: 20;
+        }
+
+        .stat-card {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid var(--iberdrola-green);
+            backdrop-filter: blur(5px);
+        }
+
+        .stat-card span {
+            color: var(--neon-blue);
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        /* PANTALLAS */
+        .screen {
+            position: absolute;
+            inset: 0;
+            background: rgba(5, 10, 16, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            text-align: center;
+            padding: 40px;
+        }
+
+        h1 { color: var(--iberdrola-green); margin-bottom: 20px; text-shadow: 0 0 10px rgba(29,131,72,0.5); }
+
+        input {
+            padding: 15px;
+            width: 80%;
+            margin: 10px 0;
+            background: #111;
+            border: 1px solid var(--neon-blue);
+            color: white;
+            border-radius: 5px;
+        }
+
+        button {
+            background: var(--iberdrola-green);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1em;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            margin-top: 20px;
+            text-transform: uppercase;
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="map-background"></div>
+        <div id="overlay"></div>
+
+        <div id="start-screen" class="screen">
+            <h1>EL VIAJE A EUROPA 🌍</h1>
+            <p>Ayuda a las Guerreras a llevar la energía a todo el continente.</p>
+            <input type="text" id="playerName" placeholder="Nombre de la Guerrera">
+            <button onclick="startGame()">INICIAR MISIÓN</button>
+        </div>
+
+        <div id="hud" class="hidden">
+            <div class="stat-card">WATTS: <span id="score">0</span></div>
+            <div class="stat-card">KM: <span id="dist">0</span></div>
+        </div>
+
+        <div id="player" class="hidden"></div>
+
+        <div id="over-screen" class="screen hidden">
+            <h2 id="msg-final">Misión Interrumpida</h2>
+            <p id="stats-final"></p>
+            <button onclick="location.reload()">REINTENTAR</button>
+        </div>
+    </div>
+
+    <script>
+        const player = document.getElementById('player');
+        const hud = document.getElementById('hud');
+        const map = document.getElementById('map-background');
+        let playerX = 180;
+        let score = 0;
+        let dist = 0;
+        let active = false;
+        let obstacles = [];
+        let mapPos = 0;
+
+        function startGame() {
+            if(!document.getElementById('playerName').value) return alert("Introduce tu nombre");
+            document.getElementById('start-screen').classList.add('hidden');
+            player.classList.remove('hidden');
+            hud.classList.remove('hidden');
+            active = true;
+            gameLoop();
+            spawnObstacles();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if(!active) return;
+            if((e.key === 'ArrowLeft' || e.key === 'a') && playerX > 30) playerX -= 60;
+            if((e.key === 'ArrowRight' || e.key === 'd') && playerX < 320) playerX += 60;
+            player.style.left = playerX + 'px';
+        });
+
+        function spawnObstacles() {
+            if(!active) return;
+            const isWall = Math.random() > 0.7;
+            const obs = document.createElement('div');
+            obs.className = isWall ? 'obstacle wall' : 'obstacle ball';
+            obs.style.left = Math.random() * (isWall ? 300 : 400) + 'px';
+            obs.style.top = '-100px';
+            document.getElementById('game-container').appendChild(obs);
+            obstacles.push(obs);
+            
+            // Dificultad aumenta con la distancia
+            setTimeout(spawnObstacles, Math.max(500, 1200 - (dist * 5)));
+        }
+
+        function gameLoop() {
+            if(!active) return;
+
+            dist += 0.15;
+            score += 2;
+            document.getElementById('score').innerText = score;
+            document.getElementById('dist').innerText = Math.floor(dist);
+
+            // Efecto sutil de movimiento en el mapa de fondo
+            mapPos += 1;
+            map.style.backgroundPosition = `center calc(100% + ${mapPos % 100}px)`;
+
+            obstacles.forEach((o, i) => {
+                let currentTop = parseInt(o.style.top);
+                currentTop += 6 + (dist / 20); // Gravedad/velocidad aumenta
+                o.style.top = currentTop + 'px';
+
+                // Detección de colisión (Hitbox ajustada al centro de la jugadora)
+                let oX = parseInt(o.style.left);
+                let oW = o.classList.contains('wall') ? 120 : 40;
+                
+                if(currentTop > 500 && currentTop < 620) {
+                    if(playerX + 25 < oX + oW && playerX + 75 > oX) {
+                        endGame();
+                    }
+                }
+
+                if(currentTop > 750) {
+                    o.remove();
+                    obstacles.splice(i, 1);
+                }
+            });
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function endGame() {
+            active = false;
+            document.getElementById('over-screen').classList.remove('hidden');
+            document.getElementById('stats-final').innerHTML = `
+                Has acumulado <strong>${score} Watts</strong><br>
+                recorriendo <strong>${Math.floor(dist)} Kilómetros</strong>.
+            `;
+        }
+    </script>
+</body>
+</html>
